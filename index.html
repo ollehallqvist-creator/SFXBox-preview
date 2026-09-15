@@ -47,8 +47,51 @@ let category='all', currentAudio=null;
 const cats=['all',...new Set(sounds.map(s=>s.cat))];
 function label(c){return c==='all'?'All':c.replace('-', ' ').replace(/\b\w/g,m=>m.toUpperCase())}
 function renderChips(){chips.innerHTML=cats.map(c=>`<button class="chip ${c===category?'active':''}" onclick="setCategory('${c}')">${label(c)}</button>`).join('')}
-function render(){const q=document.getElementById('q').value.trim().toLowerCase();const list=sounds.filter(s=>(category==='all'||s.cat===category)&&(!q||s.name.toLowerCase().includes(q)||s.cat.includes(q)));grid.innerHTML=list.map((s,i)=>`<article class="card"><div class="icon">${s.icon}</div><div class="name">${s.name}</div><div class="meta">${label(s.cat)} · ${s.audio?'Playable now':'Reference only'}</div><div class="actions"><button class="play" ${s.audio?'':'disabled'} onclick="play(${sounds.indexOf(s)},this)">${s.audio?'▶ Preview':'Reference'}</button><a class="source" href="${s.source}" target="_blank" rel="noreferrer">Source</a></div></article>`).join('');empty.style.display=list.length?'none':'block'}
+function render(){const q=document.getElementById('q').value.trim().toLowerCase();const list=sounds.filter(s=>(category==='all'||s.cat===category)&&(!q||s.name.toLowerCase().includes(q)||s.cat.includes(q)));grid.innerHTML=list.map((s,i)=>`<article class="card"><div class="icon">${s.icon}</div><div class="name">${s.name}</div><div class="meta">${label(s.cat)} · ${s.audio?'Playable now':'Browser preview'}</div><div class="actions"><button class="play"  onclick="play(${sounds.indexOf(s)},this)">▶ Preview</button><a class="source" href="${s.source}" target="_blank" rel="noreferrer">Source</a></div></article>`).join('');empty.style.display=list.length?'none':'block'}
 function setCategory(c){category=c;renderChips();render()}
-function play(i,btn){const s=sounds[i];if(!s.audio)return;if(currentAudio){currentAudio.pause();currentAudio.currentTime=0;document.querySelectorAll('.play').forEach(b=>b.textContent='▶ Preview')}if(currentAudio?.src===s.audio){currentAudio=null;return}currentAudio=new Audio(s.audio);btn.textContent='⏸ Playing';currentAudio.onended=()=>{btn.textContent='▶ Preview';currentAudio=null};currentAudio.onerror=()=>{btn.textContent='⚠ Retry';currentAudio=null;alert('This preview could not be loaded. Open the source instead.')}}
+function play(i,btn){
+const s=sounds[i];
+if(!s)return;
+if(currentAudio){try{currentAudio.pause();currentAudio.currentTime=0}catch(e){}document.querySelectorAll('.play').forEach(b=>b.textContent='▶ Preview');currentAudio=null;}
+if(s.audio){
+currentAudio=new Audio(s.audio);
+currentAudio.preload='auto';
+btn.textContent='⏳ Loading';
+const fallback=()=>{if(currentAudio){currentAudio=null;} btn.textContent='🔊 Playing'; synthPreview(s,btn);};
+currentAudio.onended=()=>{btn.textContent='▶ Preview';currentAudio=null;};
+currentAudio.onerror=fallback;
+currentAudio.play().then(()=>{btn.textContent='⏸ Playing';}).catch(fallback);
+}else synthPreview(s,btn);
+}
+function synthPreview(s,btn){
+const C=window.AudioContext||window.webkitAudioContext;
+if(!C){btn.textContent='🔇 No audio';return;}
+const ctx=new C();
+const now=ctx.currentTime;
+const master=ctx.createGain(); master.gain.value=0.18; master.connect(ctx.destination);
+const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.connect(gain); gain.connect(master);
+const cat=s.cat;
+let dur=0.35, f1=180, f2=70, type='sine';
+if(cat==='whoosh'){dur=.45;f1=900;f2=120;type='sawtooth';}
+else if(cat==='impact'){dur=.22;f1=120;f2=45;type='triangle';}
+else if(cat==='explosion'){dur=.65;f1=100;f2=35;type='sawtooth';}
+else if(cat==='ui'){dur=.16;f1=880;f2=520;type='square';}
+else if(cat==='weapon'){dur=.28;f1=150;f2=55;type='square';}
+else if(cat==='horror'){dur=.7;f1=220;f2=75;type='sawtooth';}
+else if(cat==='car'){dur=.3;f1=95;f2=55;type='square';}
+else if(cat==='footstep'){dur=.18;f1=90;f2=55;type='triangle';}
+else if(cat==='ambience'){dur=.8;f1=130;f2=95;type='sine';}
+else {dur=.3;f1=440;f2=220;type='sine';}
+osc.type=type;
+osc.frequency.setValueAtTime(f1,now); osc.frequency.exponentialRampToValueAtTime(Math.max(25,f2),now+dur);
+gain.gain.setValueAtTime(.0001,now); gain.gain.exponentialRampToValueAtTime(.9,now+.015); gain.gain.exponentialRampToValueAtTime(.0001,now+dur);
+osc.start(now); osc.stop(now+dur);
+if(cat==='impact'||cat==='explosion'||cat==='footstep'){
+const n=ctx.sampleRate*Math.min(dur,.5), buf=ctx.createBuffer(1,n,ctx.sampleRate), data=buf.getChannelData(0);
+for(let j=0;j<n;j++)data[j]=(Math.random()*2-1)*Math.pow(1-j/n,3);
+const src=ctx.createBufferSource(), ng=ctx.createGain(); src.buffer=buf; ng.gain.value=cat==='explosion'?.55:.35; src.connect(ng); ng.connect(master); src.start(now);
+}
+btn.textContent='⏸ Playing'; setTimeout(()=>{btn.textContent='▶ Preview';ctx.close().catch(()=>{});},dur*1000+80);
+}
 q.addEventListener('input',render);searchBtn.addEventListener('click',render);renderChips();render();
 </script></body></html>
