@@ -51,11 +51,31 @@ function render(){const q=document.getElementById('q').value.trim().toLowerCase(
 function setCategory(c){category=c;renderChips();render()}
 function stopAudio(){if(currentAudio){try{currentAudio.pause();currentAudio.currentTime=0}catch(e){}currentAudio=null;}document.querySelectorAll('.play').forEach(b=>b.textContent='▶ Preview');}
 function makeWavUrl(s){
- const sr=44100,dur=s.cat==='explosion'?.65:s.cat==='whoosh'?.45:s.cat==='horror'?.55:.32,n=Math.floor(sr*dur),buf=new ArrayBuffer(44+n*2),v=new DataView(buf);
- const put=(o,x)=>{for(let i=0;i<x.length;i++)v.setUint8(o+i,x.charCodeAt(i))};
+ const sr=44100,nm=(s.name||'').toLowerCase(); let dur=.35;
+ if(nm.includes('explosion'))dur=.75; else if(nm.includes('whoosh')||nm==='boost'||nm==='hook throw')dur=.48; else if(nm.includes('scream')||nm.includes('monster')||nm.includes('creature'))dur=.65; else if(nm==='footsteps')dur=.48; else if(nm==='game start')dur=.5;
+ const n=Math.floor(sr*dur),buf=new ArrayBuffer(44+n*2),v=new DataView(buf); const put=(o,x)=>{for(let i=0;i<x.length;i++)v.setUint8(o+i,x.charCodeAt(i))};
  put(0,'RIFF');v.setUint32(4,36+n*2,true);put(8,'WAVE');put(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);put(36,'data');v.setUint32(40,n*2,true);
- let f1=440,f2=220; if(s.cat==='whoosh'){f1=1100;f2=100}else if(s.cat==='impact'){f1=150;f2=45}else if(s.cat==='explosion'){f1=120;f2=35}else if(s.cat==='ui'){f1=900;f2=550}else if(s.cat==='weapon'){f1=180;f2=55}else if(s.cat==='horror'){f1=240;f2=70}else if(s.cat==='car'){f1=100;f2=50}else if(s.cat==='footstep'){f1=90;f2=45}else if(s.cat==='ambience'){f1=140;f2=90};
- for(let i=0;i<n;i++){const t=i/sr,p=t/dur,env=Math.sin(Math.PI*Math.min(1,p));let sample=Math.sin(2*Math.PI*(f1+(f2-f1)*p)*t)*env*.55;if(s.cat==='impact'||s.cat==='explosion'||s.cat==='footstep'){sample+=(Math.random()*2-1)*Math.pow(1-p,3)*(s.cat==='explosion'?.5:.32)};v.setInt16(44+i*2,Math.max(-1,Math.min(1,sample))*32767,true)}
+ function tone(t,f1,f2,amp){return Math.sin(2*Math.PI*(f1+(f2-f1)*(t/dur))*t)*amp}
+ function env(t,d=.01){return Math.min(1,t/d,.0001);}
+ for(let i=0;i<n;i++){let t=i/sr,p=t/dur,x=0;
+  if(nm==='punch'){x=tone(t,150,45,.7)*Math.exp(-10*t)+(Math.random()*2-1)*.28*Math.exp(-18*t)}
+  else if(nm.includes('explosion')){x=tone(t,100,28,.55)*Math.exp(-3*t)+(Math.random()*2-1)*.7*Math.pow(1-p,2)}
+  else if(nm.includes('whoosh')||nm==='boost'||nm==='hook throw'){x=tone(t,1200,90,.38)*Math.sin(Math.PI*p)+(Math.random()*2-1)*.12*Math.sin(Math.PI*p)}
+  else if(nm==='hook landed'){x=tone(t,180,55,.7)*Math.exp(-14*t)+(Math.random()*2-1)*.4*Math.exp(-20*t)}
+  else if(nm==='money added'){x=tone(t,900,1200,.35)*Math.exp(-12*t)+(t>.08?tone(t-.08,1300,1700,.35)*Math.exp(-14*(t-.08)):0)}
+  else if(nm==='car door shut'||nm==='door slam'){x=tone(t,95,45,.65)*Math.exp(-11*t)+(Math.random()*2-1)*.25*Math.exp(-18*t)+(t>.11?tone(t-.11,650,300,.2)*Math.exp(-25*(t-.11)):0)}
+  else if(nm==='footsteps'){let z=(t<.14?tone(t,90,45,.65)*Math.exp(-25*t):0);if(t>.24)z+=tone(t-.24,75,40,.65)*Math.exp(-25*(t-.24));x=z+(Math.random()*2-1)*.18*(t<.14?Math.exp(-22*t):Math.exp(-22*(t-.24)))}
+  else if(nm==='gun reload'){x=(t<.07?tone(t,1100,700,.35):0)+(t>.11&&t<.19?tone(t-.11,700,420,.4):0)+(t>.23&&t<.29?tone(t-.23,1500,900,.35):0)+(t>.34?tone(t-.34,500,180,.45):0)}
+  else if(nm.includes('blaster')){x=tone(t,750,80,.5)*Math.exp(-7*t)+(Math.random()*2-1)*.15*Math.exp(-15*t)}
+  else if(nm.includes('laser')){x=tone(t,1900,240,.42)*Math.sin(Math.PI*p)}
+  else if(nm==='ui click'||nm.includes('system blip')||nm.includes('hud')){x=tone(t,1000,650,.42)*Math.exp(-22*t)}
+  else if(nm==='game start'){x=(t<.12?tone(t,520,700,.4):0)+(t>.13&&t<.25?tone(t-.13,700,950,.4):0)+(t>.26?tone(t-.26,980,1250,.4):0)}
+  else if(nm.includes('monster')||nm.includes('creature')){x=tone(t,190,55,.45)*Math.sin(Math.PI*p)+(Math.sin(2*Math.PI*115*t)*.18)}
+  else if(nm.includes('scream')){x=tone(t,550,1050,.45)*Math.sin(Math.PI*p)+(Math.random()*2-1)*.2*Math.sin(Math.PI*p)}
+  else if(nm==='ambient'){x=tone(t,120,85,.12)+(Math.random()*2-1)*.05}
+  else{x=tone(t,440,220,.35)*Math.sin(Math.PI*p)}
+  v.setInt16(44+i*2,Math.max(-1,Math.min(1,x))*32767,true)
+ }
  return URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
 }
 function play(i,btn){
